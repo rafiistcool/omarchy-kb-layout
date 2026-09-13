@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "rafi.kb-layout",
+  "name": "US/DE layout",
+  "version": "1.0.0",
+  "author": "Rafael Till",
+  "license": "MIT",
+  "description": "Toggle the Hyprland keyboard layout between US and German from the bar or a keybind.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "US/DE layout",
+    "description": "Current US or German layout. Click toggles.",
+    "category": "Compositor",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "aliases": [
+      "keyboard",
+      "layout",
+      "us-de"
+    ]
+  }
+}
