@@ -9,7 +9,7 @@ switching when a keyboard is plugged in.
 ## Install
 
 ```bash
-omarchy plugin add git@github.com:rafiistcool/omarchy-kb-layout.git --enable --yes
+omarchy plugin add https://github.com/rafiistcool/omarchy-kb-layout.git --enable --yes
 ```
 
 Hyprland must list both layouts. In `~/.config/hypr/input.lua`:
