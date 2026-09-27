@@ -1,11 +1,11 @@
 // US/DE layout helpers. Qt-free so the mapping can be checked under node.
 
-var UNTYPED_KEYBOARDS = /^(hl-virtual-keyboard|power-button|sleep-button|lid-switch|video-bus|intel-hid|dell-)/
+var UNTYPED_KEYBOARDS = /^(hl-virtual-keyboard|power-button|sleep-button|lid-switch|video-bus|intel-hid|dell-wmi-hotkeys|dell-privacy-driver)/
 var UNTYPED_SUFFIX = /-(consumer-control|system-control)$/
 
 function isTypedKeyboard(name) {
   var value = String(name || "")
-  return !UNTYPED_KEYBOARDS.test(value) && !UNTYPED_SUFFIX.test(value)
+  return value !== "" && !UNTYPED_KEYBOARDS.test(value) && !UNTYPED_SUFFIX.test(value)
 }
 
 function eventKeyboardName(event) {
@@ -31,9 +31,9 @@ function selectKeyboard(typed, namedByEvent) {
 
   return keyboards.find(function (keyboard) {
     return keyboard.name === namedByEvent
-  }) || keyboards.reduce(function (furthest, keyboard) {
-    return layoutIndex(keyboard) > layoutIndex(furthest) ? keyboard : furthest
-  }, keyboards[0])
+  }) || keyboards.find(function (keyboard) {
+    return keyboard.main === true
+  }) || keyboards[0]
 }
 
 function layoutCodes(keyboard) {
@@ -89,12 +89,12 @@ function shellQuote(value) {
 function switchCommand(keyboards, code) {
   var parts = []
   ;(keyboards || []).forEach(function (keyboard) {
-    if (!isTypedKeyboard(keyboard && keyboard.name)) return
+    if (!isTypedKeyboard(keyboard && keyboard.name) || !hasUsAndDe(keyboard)) return
     var index = indexForCode(keyboard, code)
     if (index < 0) return
     parts.push("hyprctl switchxkblayout " + shellQuote(keyboard.name) + " " + index)
   })
-  return parts.join("; ")
+  return parts.join(" && ")
 }
 
 if (typeof module !== "undefined") {

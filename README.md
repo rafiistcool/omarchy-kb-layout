@@ -4,7 +4,10 @@ Toggle the Hyprland keyboard layout between **US** and **German**. Made for a
 German laptop plus a ZSA Voyager that is programmed as US QWERTY.
 
 The bar shows `US` or `DE`. Click it to switch. There is no automatic
-switching when a keyboard is plugged in.
+switching when a keyboard is plugged in. New devices are detected within five
+seconds. The plugin never rewrites Hyprland configuration: only keyboards
+configured with both `us` and `de` are switched, using each device's own layout
+order. Missing layouts and failed commands are reported in the tooltip.
 
 ## Install
 
@@ -45,6 +48,25 @@ o.bind("SUPER + SHIFT + K", "Toggle US/DE keyboard layout", "omarchy-shell rafi.
 | `omarchy-shell rafi.kb-layout use us` | Force US |
 | `omarchy-shell rafi.kb-layout use de` | Force German |
 | `omarchy-shell rafi.kb-layout status` | JSON snapshot |
+
+## Update and validation
+
+```bash
+omarchy plugin update rafi.kb-layout
+```
+
+`omarchy update` reloads plugins; it does not pull third-party Git repositories.
+Requires Hyprland, Quickshell, Bash, and GNU `timeout` (standard on Omarchy).
+
+From a development checkout:
+
+```bash
+node tests/model.test.cjs
+python3 -m unittest discover -s tests -v
+omarchy plugin validate .
+```
+
+The QML test runs with a simulated keyboard and never changes real layouts.
 
 ## Why US is first
 

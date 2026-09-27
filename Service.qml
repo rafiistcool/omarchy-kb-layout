@@ -10,21 +10,21 @@ Item {
 
   property var shell: null
   property var settings: ({})
-
   property string layoutCode: ""
   property string layoutFull: ""
   property string keyboardName: ""
   property string typedKeyboardName: ""
   property var typedKeyboards: []
   property bool refreshPending: false
-  property bool applyPending: false
   property string pendingCode: ""
+  property string applyingCode: ""
+  property string lastError: ""
 
   readonly property string layoutLabel: LayoutModel.labelFor(layoutCode)
-  readonly property string nextCode: LayoutModel.otherCode(layoutCode)
+  readonly property string nextCode: LayoutModel.otherCode(pendingCode || applyingCode || layoutCode)
 
   function refresh() {
-    if (queryProc.running) {
+    if (queryProc.running || applyProc.running) {
       refreshPending = true
       return
     }
@@ -36,40 +36,33 @@ Item {
     var name = LayoutModel.fullName(code) || LayoutModel.labelFor(code)
     if (!name) return
     Util.execArgv(["omarchy-shell", "-q", "osd", "show", JSON.stringify({
-      icon: "keyboard",
-      message: name,
-      duration: 1200
+      icon: "keyboard", message: name, duration: 1200
     })])
   }
 
   function applyCode(code) {
     if (code !== "us" && code !== "de") return
-    var command = LayoutModel.switchCommand(root.typedKeyboards, code)
+    pendingCode = code
+    refresh()
+  }
+
+  function applyQueued() {
+    if (!pendingCode || applyProc.running) return
+    var code = pendingCode
+    pendingCode = ""
+    var command = LayoutModel.switchCommand(typedKeyboards, code)
     if (!command) {
-      if (!ensureProc.running) ensureProc.running = true
-      pendingCode = code
-      applyPending = true
+      lastError = "Configure kb_layout = us,de for the keyboard in Hyprland first."
       return
     }
-    if (applyProc.running) {
-      pendingCode = code
-      applyPending = true
-      return
-    }
-    root.layoutCode = code
-    root.layoutFull = LayoutModel.fullName(code)
-    applyProc.command = ["bash", "-lc", command]
+    applyingCode = code
+    lastError = ""
+    applyProc.command = ["timeout", "--kill-after=1s", "10s", "bash", "-c", command]
     applyProc.running = true
-    root.showOsd(code)
   }
 
-  function toggle() {
-    root.applyCode(root.nextCode)
-  }
-
-  function setLayout(code) {
-    root.applyCode(String(code || "").toLowerCase())
-  }
+  function toggle() { applyCode(nextCode) }
+  function setLayout(code) { applyCode(String(code || "").toLowerCase()) }
 
   Component.onCompleted: refresh()
 
@@ -79,117 +72,81 @@ Item {
       if (!event || !event.name) return
       var name = String(event.name)
       if (name === "activelayout") {
-        const named = LayoutModel.eventKeyboardName(event)
+        var named = LayoutModel.eventKeyboardName(event)
         if (named) root.typedKeyboardName = named
       }
-      if (name.indexOf("activelayout") !== -1 || name === "configreloaded") root.refresh()
+      if (name === "activelayout" || name === "configreloaded") root.refresh()
     }
   }
 
   Process {
     id: queryProc
-    command: ["hyprctl", "-j", "devices"]
-    onRunningChanged: {
-      if (running) {
-        stallTimer.restart()
+    command: ["timeout", "--kill-after=1s", "3s", "hyprctl", "-j", "devices"]
+    stdout: StdioCollector { id: devicesOutput; waitForEnd: true }
+    onExited: function(exitCode) {
+      var listed = null
+      try { listed = JSON.parse(devicesOutput.text || "{}").keyboards } catch (error) {}
+      if (exitCode !== 0 || !Array.isArray(listed)) {
+        root.lastError = "Could not read Hyprland keyboards"
+        root.pendingCode = ""
         return
       }
-      stallTimer.stop()
-      if (root.refreshPending) root.refresh()
+      root.typedKeyboards = listed.filter(function(keyboard) {
+        return LayoutModel.isTypedKeyboard(keyboard && keyboard.name)
+      })
+      var keyboard = LayoutModel.selectKeyboard(root.typedKeyboards, root.typedKeyboardName)
+      root.keyboardName = keyboard ? String(keyboard.name || "") : ""
+      root.layoutCode = LayoutModel.currentCode(keyboard)
+      root.layoutFull = keyboard ? String(keyboard.active_keymap || LayoutModel.fullName(root.layoutCode)) : ""
+      root.applyQueued()
+      if (root.refreshPending) refreshTimer.restart()
     }
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        let listed
-        try {
-          listed = JSON.parse(text || "{}").keyboards
-        } catch (e) {
-          return
-        }
-        if (!Array.isArray(listed)) return
-
-        const typed = listed.filter(function (keyboard) {
-          return LayoutModel.isTypedKeyboard(keyboard && keyboard.name)
-        })
-        root.typedKeyboards = typed
-
-        const keyboard = LayoutModel.selectKeyboard(typed, root.typedKeyboardName)
-        if (!keyboard || !keyboard.active_keymap) {
-          if (typed.length === 0) {
-            root.layoutCode = ""
-            root.layoutFull = ""
-            root.keyboardName = ""
-          }
-          return
-        }
-
-        root.keyboardName = String(keyboard.name || "")
-        root.layoutCode = LayoutModel.currentCode(keyboard)
-        root.layoutFull = String(keyboard.active_keymap || LayoutModel.fullName(root.layoutCode))
-
-        if (!LayoutModel.hasUsAndDe(keyboard) && !ensureProc.running)
-          ensureProc.running = true
-      }
-    }
-  }
-
-  Process {
-    id: ensureProc
-    command: ["hyprctl", "keyword", "input:kb_layout", "us,de"]
-    onExited: refreshTimer.restart()
   }
 
   Process {
     id: applyProc
-    onExited: function() {
-      if (root.applyPending) {
-        root.applyPending = false
-        var code = root.pendingCode
-        root.pendingCode = ""
-        root.applyCode(code)
-        return
-      }
-      refreshTimer.restart()
+    onExited: function(exitCode) {
+      var code = root.applyingCode
+      root.applyingCode = ""
+      if (exitCode === 0) root.showOsd(code)
+      else root.lastError = "Could not switch the keyboard layout"
+      root.refresh()
     }
   }
 
   Timer {
     id: refreshTimer
-    interval: 600
+    interval: 100
     onTriggered: root.refresh()
   }
 
+  // Hyprland does not emit a layout event for every device hotplug.
+  // Discover it without changing either its layout or global configuration.
   Timer {
-    id: stallTimer
     interval: 5000
-    onTriggered: {
-      queryProc.running = false
-      refreshTimer.restart()
-    }
+    running: true
+    repeat: true
+    onTriggered: root.refresh()
   }
 
   IpcHandler {
     target: "rafi.kb-layout"
-
     function toggle(): string {
       var next = root.nextCode
       root.toggle()
       return next
     }
-
     function use(code: string): string {
       var layout = String(code || "").toLowerCase()
       if (layout !== "us" && layout !== "de") return root.layoutCode
       root.setLayout(layout)
       return layout
     }
-
     function status(): string {
       return JSON.stringify({
-        layout: root.layoutCode,
-        label: root.layoutLabel,
-        keymap: root.layoutFull,
-        keyboard: root.keyboardName
+        layout: root.layoutCode, label: root.layoutLabel,
+        keymap: root.layoutFull, keyboard: root.keyboardName,
+        pending: root.pendingCode || root.applyingCode, error: root.lastError
       })
     }
   }
