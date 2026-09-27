@@ -75,7 +75,7 @@ Item {
         var named = LayoutModel.eventKeyboardName(event)
         if (named) root.typedKeyboardName = named
       }
-      if (name === "activelayout" || name === "configreloaded") root.refresh()
+      if (name === "activelayout" || name === "configreloaded") refreshTimer.restart()
     }
   }
 
@@ -123,7 +123,7 @@ Item {
   // Hyprland does not emit a layout event for every device hotplug.
   // Discover it without changing either its layout or global configuration.
   Timer {
-    interval: 5000
+    interval: 60000
     running: true
     repeat: true
     onTriggered: root.refresh()

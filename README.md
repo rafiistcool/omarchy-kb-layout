@@ -4,8 +4,8 @@ Toggle the Hyprland keyboard layout between **US** and **German**. Made for a
 German laptop plus a ZSA Voyager that is programmed as US QWERTY.
 
 The bar shows `US` or `DE`. Click it to switch. There is no automatic
-switching when a keyboard is plugged in. New devices are detected within five
-seconds. The plugin never rewrites Hyprland configuration: only keyboards
+switching when a keyboard is plugged in. Layout changes follow Hyprland events (debounced by 100 ms). Device discovery
+runs once per minute as a hotplug fallback and immediately before every switch. The plugin never rewrites Hyprland configuration: only keyboards
 configured with both `us` and `de` are switched, using each device's own layout
 order. Missing layouts and failed commands are reported in the tooltip.
 

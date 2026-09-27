@@ -25,13 +25,14 @@ import Quickshell
 import "Kb" as Kb
 ShellRoot {
   Kb.Service { id: service }
+  property double settledAt: 0
   Component.onCompleted: service.setLayout("de")
   Timer {
     interval: 50; running: true; repeat: true
     onTriggered: {
       if (service.layoutCode === "de" && service.pendingCode === "" && service.applyingCode === "") {
-        console.log("KB_TEST_PASS")
-        Qt.quit()
+        if (settledAt === 0) settledAt = Date.now()
+        if (Date.now() - settledAt > 5600) { console.log("KB_TEST_PASS"); Qt.quit() }
       }
     }
   }
@@ -58,11 +59,12 @@ else: raise SystemExit(99)
                        KB_TEST_ROOT=str(root), PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'],
                        HYPRLAND_INSTANCE_SIGNATURE='')
             result = subprocess.run(['qs', '-p', str(root), '--no-color'], env=env,
-                                    capture_output=True, text=True, timeout=8)
+                                    capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('KB_TEST_PASS', result.stdout + result.stderr)
             calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()]
             self.assertIn(['switchxkblayout', 'test-keyboard', '1'], calls)
             self.assertFalse(any('keyword' in args for args in calls))
+            self.assertLessEqual(calls.count(['-j', 'devices']), 3, calls)
 
 if __name__ == '__main__': unittest.main()
