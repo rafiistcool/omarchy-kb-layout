@@ -12,7 +12,7 @@ BarWidget {
   readonly property string layoutCode: kbService ? kbService.layoutCode : ""
   readonly property string layoutFull: kbService ? kbService.layoutFull : ""
   readonly property string layoutLabel: LayoutModel.labelFor(layoutCode)
-  readonly property string nextCode: LayoutModel.otherCode(layoutCode)
+  readonly property string nextCode: kbService ? kbService.nextCode : LayoutModel.otherCode(layoutCode)
 
   function bindService() {
     if (kbService) return

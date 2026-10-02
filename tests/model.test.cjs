@@ -36,3 +36,8 @@ test('recognizes active map and reversed configured order', () => {
   assert.equal(model.currentCode({...keyboard('a'), active_keymap:'German'}), 'de');
   assert.equal(model.currentCode(keyboard('a', 'de,us', 1)), 'us');
 });
+test('ignores layout events from non-typing devices', () => {
+  for (const name of ['power-button', 'sdca-hid:04-consumer-control', 'hl-virtual-keyboard'])
+    assert.equal(model.eventKeyboardName({data: name + ',English (US)'}), '');
+  assert.equal(model.eventKeyboardName({data: 'at-translated-set-2-keyboard,German'}), 'at-translated-set-2-keyboard');
+});

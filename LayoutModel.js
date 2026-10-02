@@ -19,7 +19,7 @@ function eventKeyboardName(event) {
   if (!parts) parts = String(event && event.data ? event.data : "").split(",")
 
   var name = String(parts[0] || "")
-  return name.indexOf("hl-virtual-keyboard") === 0 ? "" : name
+  return isTypedKeyboard(name) ? name : ""
 }
 
 function layoutIndex(keyboard) {

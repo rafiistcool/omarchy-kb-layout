@@ -7,9 +7,12 @@ The bar shows `US` or `DE`. Click it to switch. The last selected layout is save
 in `$XDG_STATE_HOME/omarchy/rafi.kb-layout/layout.json` (default:
 `~/.local/state/omarchy/rafi.kb-layout/layout.json`) and restored on shell startup,
 after suspend/resume, and after a Hyprland configuration reload. Restoration is
-silent and rechecks devices for a few seconds to handle delayed wake resets.
-Normal keyboard hotplug does not trigger switching. Layout changes follow Hyprland events (debounced by 100 ms). Device discovery
-runs once per minute as a hotplug fallback and immediately before every switch. The plugin never rewrites Hyprland configuration: only keyboards
+silent. Your saved choice remains authoritative until you switch through the
+bar, keybind, or plugin IPC. Reset and hotplug events never overwrite it;
+reconnected keyboards receive the same saved layout. Hyprland events trigger
+checks (debounced by 100 ms), with a check every two seconds as a fallback for
+missing events and delayed resets, including display sleep without system
+suspend. The plugin never rewrites Hyprland configuration: only keyboards
 configured with both `us` and `de` are switched, using each device's own layout
 order. Missing layouts and failed commands are reported in the tooltip.
 

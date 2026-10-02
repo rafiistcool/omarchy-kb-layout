@@ -23,19 +23,17 @@ Item {
   property string savedCode: ""
   property bool stateReady: false
   property bool stateWritable: false
-  property bool sleeping: false
-  property int restoreChecks: 0
   property bool pendingSilent: false
   property bool applyingSilent: false
-  property bool observeLayout: false
+  property double retryAfter: 0
   readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") ||
     Quickshell.env("HOME") + "/.local/state") + "/omarchy/rafi.kb-layout"
 
   readonly property string layoutLabel: LayoutModel.labelFor(layoutCode)
-  readonly property string nextCode: LayoutModel.otherCode(pendingCode || applyingCode || layoutCode)
+  readonly property string nextCode: LayoutModel.otherCode(pendingCode || applyingCode || savedCode || layoutCode)
 
   function refresh() {
-    if (!stateReady || sleeping) return
+    if (!stateReady) return
     if (queryProc.running || applyProc.running) {
       refreshPending = true
       return
@@ -56,8 +54,7 @@ Item {
     if (code !== "us" && code !== "de") return
     pendingCode = code
     pendingSilent = false
-    restoreChecks = 0
-    restoreTimer.stop()
+    retryAfter = 0
     refresh()
   }
 
@@ -80,31 +77,33 @@ Item {
   }
 
   function restoreSaved() {
-    if (!stateReady || sleeping) return
-    // Recheck briefly: devices can reappear or reset after the wake signal.
-    restoreChecks = savedCode ? 5 : 0
-    if (restoreChecks) restoreTimer.restart()
+    if (!stateReady) return
+    retryAfter = 0
     refresh()
   }
 
   function prepareForSleep(asleep) {
-    sleeping = asleep
-    if (asleep) restoreTimer.stop()
-    else restoreSaved()
+    // Reconciliation also runs without a resume signal. Timers naturally pause
+    // during system suspend; a lost DBus signal must not disable the fallback.
+    if (!asleep) restoreSaved()
   }
 
   function applyQueued() {
     if (!pendingCode || applyProc.running) return
     var code = pendingCode
     pendingCode = ""
-    var command = LayoutModel.switchCommand(typedKeyboards, code)
+    var silent = pendingSilent
+    pendingSilent = false
+    var keyboards = silent ? typedKeyboards.filter(function(device) {
+      return LayoutModel.currentCode(device) !== code
+    }) : typedKeyboards
+    var command = LayoutModel.switchCommand(keyboards, code)
     if (!command) {
       lastError = "Configure kb_layout = us,de for the keyboard in Hyprland first."
       return
     }
     applyingCode = code
-    applyingSilent = pendingSilent
-    pendingSilent = false
+    applyingSilent = silent
     lastError = ""
     applyProc.command = ["timeout", "--kill-after=1s", "10s", "bash", "-c", command]
     applyProc.running = true
@@ -123,8 +122,6 @@ Item {
       if (name === "activelayout") {
         var named = LayoutModel.eventKeyboardName(event)
         if (named) root.typedKeyboardName = named
-        if (named && !applyProc.running && !root.pendingCode && !root.restoreChecks && !root.sleeping)
-          root.observeLayout = true
       }
       if (name === "configreloaded") root.restoreSaved()
       else if (name === "activelayout") refreshTimer.restart()
@@ -140,7 +137,7 @@ Item {
       try { listed = JSON.parse(devicesOutput.text || "{}").keyboards } catch (error) {}
       if (exitCode !== 0 || !Array.isArray(listed)) {
         root.lastError = "Could not read Hyprland keyboards"
-        if (!root.restoreChecks) root.pendingCode = ""
+        root.pendingCode = ""
         return
       }
       root.typedKeyboards = listed.filter(function(keyboard) {
@@ -150,19 +147,20 @@ Item {
       root.keyboardName = keyboard ? String(keyboard.name || "") : ""
       root.layoutCode = LayoutModel.currentCode(keyboard)
       root.layoutFull = keyboard ? String(keyboard.active_keymap || LayoutModel.fullName(root.layoutCode)) : ""
-      if (root.sleeping) return
-      if (!root.pendingCode && root.restoreChecks && root.savedCode) {
-        var needsRestore = root.typedKeyboards.some(function(device) {
-          return LayoutModel.hasUsAndDe(device) && LayoutModel.currentCode(device) !== root.savedCode
-        })
-        if (needsRestore) {
-          root.pendingCode = root.savedCode
-          root.pendingSilent = true
+      // Only an explicit, successful plugin switch changes the saved choice.
+      // Wake/hotplug layout events can arrive late or without a sleep signal.
+      if (!root.pendingCode) {
+        if (!root.savedCode) root.remember(root.layoutCode)
+        if (root.savedCode && Date.now() >= root.retryAfter) {
+          var needsRestore = root.typedKeyboards.some(function(device) {
+            return LayoutModel.hasUsAndDe(device) && LayoutModel.currentCode(device) !== root.savedCode
+          })
+          if (needsRestore) {
+            root.pendingCode = root.savedCode
+            root.pendingSilent = true
+          }
         }
-      } else if (!root.pendingCode && !root.restoreChecks) {
-        if (!root.savedCode || root.observeLayout) root.remember(root.layoutCode)
       }
-      root.observeLayout = false
       root.applyQueued()
       if (root.refreshPending) refreshTimer.restart()
     }
@@ -174,10 +172,14 @@ Item {
       var code = root.applyingCode
       root.applyingCode = ""
       if (exitCode === 0) {
-        root.remember(code)
-        if (!root.applyingSilent) root.showOsd(code)
+        if (!root.applyingSilent) {
+          root.remember(code)
+          root.showOsd(code)
+        }
+      } else {
+        root.lastError = "Could not switch the keyboard layout"
+        root.retryAfter = Date.now() + 3000
       }
-      else root.lastError = "Could not switch the keyboard layout"
       root.applyingSilent = false
       root.refresh()
     }
@@ -196,6 +198,7 @@ Item {
   FileView {
     id: stateFile
     atomicWrites: true
+    blockWrites: true
     printErrors: false
     onLoaded: root.loadState(text())
     onLoadFailed: root.loadState("")
@@ -225,30 +228,15 @@ Item {
   }
 
   Timer {
-    id: restoreTimer
-    interval: 1000
-    repeat: true
-    onTriggered: {
-      if (root.restoreChecks > 1) {
-        root.restoreChecks--
-        root.refresh()
-      } else {
-        root.restoreChecks = 0
-        stop()
-      }
-    }
-  }
-
-  Timer {
     id: refreshTimer
     interval: 100
     onTriggered: root.refresh()
   }
 
-  // Hyprland does not emit a layout event for every device hotplug.
-  // Discover it without changing either its layout or global configuration.
+  // Keep reconciling for resets that arrive without a usable wake/layout event,
+  // including display sleep and devices that reconnect long after resume.
   Timer {
-    interval: 60000
+    interval: 2000
     running: true
     repeat: true
     onTriggered: root.refresh()
