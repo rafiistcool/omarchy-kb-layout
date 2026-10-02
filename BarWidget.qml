@@ -46,7 +46,8 @@ BarWidget {
     text: root.layoutLabel
     fontSize: Style.font.caption
     horizontalMargin: 6
-    tooltipText: kbService && kbService.lastError ? kbService.lastError : root.layoutFull
+    tooltipText: kbService && (kbService.lastError || kbService.persistenceError)
+      ? (kbService.lastError || kbService.persistenceError) : root.layoutFull
       ? (root.layoutFull + " · click to switch to " + LayoutModel.labelFor(root.nextCode))
       : "Toggle US/DE layout"
     onPressed: function() { root.toggle() }
