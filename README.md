@@ -16,33 +16,57 @@ suspend. The plugin never rewrites Hyprland configuration: only keyboards
 configured with both `us` and `de` are switched, using each device's own layout
 order. Missing layouts and failed commands are reported in the tooltip.
 
+A layout switched by anything other than this plugin (Omarchy's `SUPER + I`,
+its keyboard layout widget, `hyprctl switchxkblayout`) is treated like a reset
+and undone, which is why the install below replaces both.
+
 ## Install
 
 ```bash
 omarchy plugin add https://github.com/rafiistcool/omarchy-kb-layout.git --enable --yes
 ```
 
-Hyprland must list both layouts. In `~/.config/hypr/input.lua`:
-
-```lua
-hl.config({
-  input = {
-    -- US first so Super+letter binds keep matching the Voyager.
-    kb_layout = "us,de",
-  },
-})
-```
-
-Then reload:
+Hyprland must list both layouts, US first. Pick `English (US)` and then
+`German` in Omarchy's keyboard setup:
 
 ```bash
-hyprctl reload
+omarchy setup keyboard
 ```
 
-Optional keybind in `~/.config/hypr/bindings.lua`:
+It saves the choice to `~/.config/omarchy/keyboard-layouts`:
+
+```
+XKBLAYOUT=us,de
+XKBVARIANT=,
+```
+
+Setting `kb_layout = "us,de"` in `~/.config/hypr/input.lua` works too.
+
+Then swap Omarchy's own keyboard layout widget for this one, in the same spot:
+
+```bash
+omarchy plugin enable rafi.kb-layout --after omarchy.keyboard-layout
+omarchy plugin disable omarchy.keyboard-layout
+```
+
+### Super + I
+
+Omarchy binds `SUPER + I` and `SUPER + SHIFT + I` to `omarchy-input-method cycle`.
+With a single Fcitx input method that cycles the Hyprland layouts directly, and
+the plugin puts its saved layout back within two seconds. Route both keys
+through the plugin in `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + SHIFT + K", "Toggle US/DE keyboard layout", "omarchy-shell rafi.kb-layout toggle")
+hl.unbind("SUPER + I")
+hl.unbind("SUPER + SHIFT + I")
+o.bind("SUPER + I", "Toggle US/DE keyboard layout", "omarchy-shell rafi.kb-layout toggle")
+o.bind("SUPER + SHIFT + I", "Toggle US/DE keyboard layout", "omarchy-shell rafi.kb-layout toggle")
+```
+
+Then check the config:
+
+```bash
+hyprctl reload && hyprctl configerrors
 ```
 
 ## Use
@@ -50,7 +74,7 @@ o.bind("SUPER + SHIFT + K", "Toggle US/DE keyboard layout", "omarchy-shell rafi.
 | Action | Result |
 |---|---|
 | Click the bar label | Toggle US ↔ DE |
-| `SUPER + SHIFT + K` | Same toggle, with an OSD |
+| `SUPER + I` | Same toggle, with an OSD (after the rebind above) |
 | `omarchy-shell rafi.kb-layout toggle` | Toggle from a script or Voyager key |
 | `omarchy-shell rafi.kb-layout use us` | Force US |
 | `omarchy-shell rafi.kb-layout use de` | Force German |

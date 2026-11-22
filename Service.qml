@@ -99,7 +99,7 @@ Item {
     }) : typedKeyboards
     var command = LayoutModel.switchCommand(keyboards, code)
     if (!command) {
-      lastError = "Configure kb_layout = us,de for the keyboard in Hyprland first."
+      lastError = "Add the us and de layouts with omarchy setup keyboard first."
       return
     }
     applyingCode = code
